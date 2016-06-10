@@ -1,0 +1,5 @@
+result/
+
+# OS and IDE specific
+Session.vim
+*.swp
