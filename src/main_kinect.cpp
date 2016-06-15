@@ -45,6 +45,9 @@
 #include <iostream>
 #include <fstream>
 #include <string.h>
+#include <math.h>
+
+#define RAD(deg) deg * M_PI / 180
 
 /* Sampling of random 6DoF transformations. */
 void getRandomTransform(const double &p_x,
@@ -61,10 +64,48 @@ void getRandomTransform(const double &p_x,
             p_z*(double)(rand()%2000 -1000)/1000);
     p_tf = Eigen::Affine3d::Identity();
     // p_tf.translate(t);
-    p_tf.rotate(Eigen::AngleAxisd( p_angle * (double)(rand()%2000 - 1000)/1000, axis));
+    // p_tf.rotate(Eigen::AngleAxisd( p_angle * (double)(rand()%2000 - 1000)/1000, axis));
     // p_tf.rotate(Eigen::AngleAxisd( p_angle*(double)(rand()%2000 - 1000)/1000, 
     //             Eigen::Vector3d::UnitY()));
 }
+
+
+Eigen::Quaterniond* createQuaternion(int pitch, int yaw, int roll)
+{
+    float c1 = cos(RAD(yaw) / 2);
+    float c2 = cos(RAD(pitch) / 2);
+    float c3 = cos(RAD(roll) / 2);
+    float s1 = sin(RAD(yaw) / 2);
+    float s2 = sin(RAD(pitch) / 2);
+    float s3 = sin(RAD(roll) / 2);
+
+    float w = c1 * c2 * c3 - s1 * s2 * s3;
+    float x = s1 * s2 * c3 + c1 * c2 * s3;
+    float y = s1 * c2 * c3 + c1 * s2 * s3;
+    float z = c1 * s2 * c3 - s1 * c2 * s3;
+
+    printf("(w, x, y, z): (%.3f, %.3f, %.3f, %.3f)\n", w, x, y, z);
+    return new Eigen::Quaterniond(w, x, y, z);
+}
+
+
+Eigen::Quaterniond* nextRotation(int &pitch, int &yaw, int &roll, int &yaw_inc, int &roll_inc)
+{
+    if (roll > 90) return 0;
+
+    Eigen::Quaterniond* rot = createQuaternion(pitch, yaw, roll);
+    printf("Generating for rot values (%d, %d, %d)\n", pitch, yaw, roll);
+
+    if (yaw < 360 - yaw_inc) {
+        yaw += yaw_inc;
+    } else {
+        roll += roll_inc;
+        yaw = 0;
+    }
+
+    return rot;
+}
+
 
 // main function that generated a number of sample outputs for a given object mesh. 
 int main(int argc, char **argv)
@@ -89,18 +130,24 @@ int main(int argc, char **argv)
     // Camera Parameters
     render_kinect::CameraInfo cam_info;
 
-
+    /*
     cam_info.width = 640;
     cam_info.height = 480;
     cam_info.cx_ = 320;
     cam_info.cy_ = 240;
+    */
+
+    cam_info.width = 280;
+    cam_info.height = 140;
+    cam_info.cx_ = 140;
+    cam_info.cy_ = 70;
 
     cam_info.z_near = 0.5;
     cam_info.z_far = 6;
     // cam_info.fx_ = 580.0;
     // cam_info.fy_ = 580.0;
-    cam_info.fx_ = 780.0;
-    cam_info.fy_ = 780.0;
+    cam_info.fx_ = 280.0;
+    cam_info.fy_ = 280.0;
     // baseline between IR projector and IR camera
     cam_info.tx_ = 0.075;
 
@@ -110,23 +157,21 @@ int main(int argc, char **argv)
     cam_info.noise_ = render_kinect::NONE;
 
     // Test Transform
-    Eigen::Affine3d transform(Eigen::Affine3d::Identity());
-    transform.translate(Eigen::Vector3d(0.089837, -0.137769, 0.949210));
-    transform.rotate(Eigen::Quaterniond(0.906614,-0.282680,-0.074009,-0.304411));
-    transform.rotate(Eigen::Quaterniond(0.5, 0.5, 0.5, 0.5));
-    // transform.rotate(Eigen::Quaterniond(0.7071, -0.7071, 0, 0));
-
-    // Kinect Simulator
-    render_kinect::Simulate Simulator(cam_info, out_dir, full_path.str(), dot_path);
+    // Eigen::Affine3d transform(Eigen::Affine3d::Identity());
+    // transform.translate(Eigen::Vector3d(0.089837, -0.137769, 0.949210));
+    // transform.rotate(Eigen::Quaterniond(0.906614,-0.282680,-0.074009,-0.304411));
 
     // Number of samples
     int frames = 9;
-    if (argc > 2) {
-        frames = atoi(argv[2]);
+
+    int yaw_inc = 45, roll_inc = 30;
+    if (argc > 3) {
+        yaw_inc = atoi(argv[2]);
+        roll_inc = atoi(argv[3]);
     }
 
     bool ply = false;
-    if (argc > 3 && strcmp("ply", argv[3]) == 0) {
+    if (argc > 4 && strcmp("ply", argv[4]) == 0) {
         ply = true;
     }
 
@@ -135,6 +180,25 @@ int main(int argc, char **argv)
     bool store_label = 0;
     bool store_pcd = 1;
 
+    // Kinect Simulator
+    render_kinect::Simulate Simulator(cam_info, out_dir, full_path.str(), dot_path);
+
+    int pitch = 0, yaw = 0, roll = 10;
+    Eigen::Quaterniond* rot = nextRotation(pitch, yaw, roll, yaw_inc, roll_inc);
+    while (rot != 0)
+    {
+        Eigen::Affine3d transform(Eigen::Affine3d::Identity());
+        transform.translate(Eigen::Vector3d(0.089837, -0.137769, 0.949210));
+        transform.rotate(*rot);
+        delete rot;
+        
+        Simulator.simulateMeasurement(transform, store_depth, store_label, store_pcd, ply);
+
+        rot = nextRotation(pitch, yaw, roll, yaw_inc, roll_inc);
+    }
+    delete rot;
+
+    /*
     // Storage of random transform
     Eigen::Affine3d noise;
     for(int i=0; i<frames; ++i) {
@@ -147,6 +211,7 @@ int main(int argc, char **argv)
         Simulator.simulateMeasurement(current_tf, store_depth, store_label, store_pcd, ply);
 
     }
+    */
 
     return 0;
 }

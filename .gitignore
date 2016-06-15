@@ -1,5 +1,11 @@
 result/
 
+
+# Make & build
+build/
+bin/
+lib/
+
 # OS and IDE specific
 Session.vim
 *.swp

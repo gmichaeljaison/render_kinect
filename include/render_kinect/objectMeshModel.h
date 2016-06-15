@@ -155,7 +155,11 @@ namespace render_kinect
             unsigned getNumFaces(){return numFaces_;}
 
             // given a new object transformation, update the original transform (an identity transform)
-            void updateTransformation(const Eigen::Affine3d &p_tf){transform_ = p_tf * original_transform_;}
+            void updateTransformation(const Eigen::Affine3d &p_tf) 
+            {
+                // transform_ = p_tf * original_transform_; 
+                transform_ = p_tf; 
+            }
 
             // exchange the vertices in the search tree with the newly transformed ones
             void uploadVertices(TreeAndTri* search)
